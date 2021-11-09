@@ -1,0 +1,95 @@
+version: "3"
+
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - "./web/nginx.conf:/etc/nginx/conf.d/default.conf"
+
+  publisher:
+    image: alpine:latest
+    expose:
+      - "80"
+    volumes:
+      - "./publisher/bin/pub_client:/app/pub_client"
+      - "./publisher/cert/:/run/secrets/"
+    entrypoint: "/app/pub_client"
+    command:
+      - "-rootCa"
+      - "/run/secrets/rootCA.crt"
+      - "-clientCa"
+      - "/run/secrets/publisher.crt"
+      - "-clientKey"
+      - "/run/secrets/publisher.key"
+      - "-serverCa"
+      - "/run/secrets/publisher.crt"
+      - "-serverKey"
+      - "/run/secrets/publisher.key"
+      - "-uName"
+      - "nats_user"
+      - "-uPass"
+      - "pass"
+      - "-p"
+      - ":80"
+      - "-tsHost"
+      - "nats:4222"
+    depends_on:
+      - "nats"
+
+  subscriber:
+    image: alpine:latest
+    expose:
+      - "80"
+    volumes:
+      - "./subscriber/bin/sub_client:/app/sub_client"
+      - "./subscriber/cert/:/run/secrets/"
+    entrypoint: "/app/sub_client"
+    command:
+      - "-rootCa"
+      - "/run/secrets/rootCA.crt"
+      - "-clientCa"
+      - "/run/secrets/subscriber.crt"
+      - "-clientKey"
+      - "/run/secrets/subscriber.key"
+      - "-uName"
+      - "nats_user"
+      - "-uPass"
+      - "pass"
+      - "-server"
+      - "nats:4222"
+      - "-worker"
+      - "backend:443"
+      - "-debug"
+      - "false"
+
+  nats:
+    image: nats:latest
+    expose:
+      - "4222"
+      - "8222"
+    volumes:
+      - "./nats/cert/:/run/secrets/"
+      - "./publisher/bin/pub_client:/app/pub_client"
+    command:
+      - "--tls"
+      - "--tlscert"
+      - "/run/secrets/nats.crt"
+      - "--tlskey"
+      - "/run/secrets/nats.key"
+      - "--user"
+      - "nats_user"
+      - "--pass"
+      - "pass"
+
+  backend:
+    build:
+      context: ./backend
+    volumes:
+      - "./backend/nginx.conf:/etc/nginx/nginx.conf"
+      - "./backend/default.conf:/etc/nginx/conf.d/default.conf"
+      - "./backend/cert/:/cert/"
+    expose:
+      - "80"
+      - "443"
